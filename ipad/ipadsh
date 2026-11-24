@@ -1,0 +1,11 @@
+#!/bin/sh
+# 免密连 iPad（iOS 9.3.5 的 OpenSSH 6.7 只讲老算法，macOS 客户端默认全关掉了）
+# 用法：ipad/ipadsh '命令'
+HOST="$IPADSH_HOST"   # 不给默认地址：必须自己指
+[ -n "$HOST" ] || { echo "要设 IPADSH_HOST=<iPad 地址>"; exit 2; }
+exec ssh -i "$HOME/.ssh/id_ed25519_ipad" -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o KexAlgorithms=ecdh-sha2-nistp256,diffie-hellman-group14-sha1 \
+  -o HostKeyAlgorithms=ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa \
+  -o Ciphers=aes128-ctr,aes256-ctr -o MACs=hmac-sha2-256,hmac-sha1 \
+  "root@$HOST" "export PATH=/usr/bin:/bin:/usr/sbin:/sbin; $*"

@@ -1,0 +1,14 @@
+#!/bin/sh
+# 连 iPad 的 ssh 包装：iOS 9 的 OpenSSH 6.9 只讲老算法，macOS 27 的客户端默认全关了，
+# 所以这里显式允许 sha1 的 diffie-hellman 组和 ssh-rsa 主机密钥。
+# 用法：ipad/ipadssh '命令'         （默认走 Wi-Fi 地址）
+#       IPADSSH_HOST=127.0.0.1 IPADSSH_PORT=2222 ipad/ipadssh '命令'   （走 USB iproxy）
+HOST="$IPADSSH_HOST"   # 不给默认地址：必须自己指
+[ -n "$HOST" ] || { echo "要设 IPADSSH_HOST=<iPad 地址>"; exit 2; }
+PORT="${IPADSSH_PORT:-2222}"
+exec ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o KexAlgorithms=ecdh-sha2-nistp256,diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha1 \
+  -o HostKeyAlgorithms=ssh-rsa \
+  -o Ciphers=aes128-ctr,aes256-ctr \
+  -o MACs=hmac-sha2-256,hmac-sha1 \
+  -p "$PORT" "root@$HOST" "$@"

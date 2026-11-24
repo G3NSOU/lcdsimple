@@ -1,0 +1,11 @@
+# 编译产物和本机看图用的图
+dist/
+/routerpanel
+shot/
+*.png.tmp
+
+# 本机部署目标：地址和密钥路径，不该进仓库
+.deploy.conf
+
+# 设备上的备份/一次性产物
+ipad/backup/

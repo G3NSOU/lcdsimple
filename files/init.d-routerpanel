@@ -1,0 +1,100 @@
+#!/bin/sh /etc/rc.common
+# routerpanel —— 软路由屏幕状态面板
+# 直接写 /dev/fb0，不走 X/Wayland；进程退出时自己把 fbcon 挂回去，
+# 这里再兜一层：万一被 kill -9，屏幕不至于停在最后一帧或黑着。
+
+START=98
+STOP=10
+USE_PROCD=1
+
+PROG=/etc/routerpanel/routerpanel
+UC=routerpanel
+
+get() { uci -q get "$UC.@panel[0].$1"; }
+
+restore_console() {
+	local d
+	for d in /sys/class/vtconsole/vtcon*; do
+		[ -f "$d/name" ] || continue
+		case "$(cat "$d/name" 2>/dev/null)" in
+		*"frame buffer"*) echo 1 >"$d/bind" 2>/dev/null ;;
+		esac
+	done
+}
+
+start_service() {
+	# enabled 是总开关：0 就什么都不起，屏幕交还控制台、网页也停
+	[ "$(get enabled)" = "1" ] || return 0
+	local screen=http_off
+	screen="$(get screen)"
+	local port
+	port="$(get http_port)"
+	# 只用 iPad 看面板（screen=0）时：不写帧缓冲、不摘 fbcon，采集和网页照跑。
+	# 两块都关就没有存在的理由了，别留一个空转进程
+	if [ "$screen" = "0" ] && { [ -z "$port" ] || [ "$port" = "0" ]; }; then
+		echo "routerpanel: 屏幕输出和 iPad 网页都关着，不起进程" >&2
+		return 0
+	fi
+	[ -x "$PROG" ] || { echo "找不到 $PROG" >&2; return 1; }
+
+	procd_open_instance panel
+	procd_set_param command "$PROG"
+	procd_append_param command -pidfile /var/run/routerpanel.pid
+	[ "$screen" = "0" ] && procd_append_param command -no-fb
+
+	local v
+	# 面板名字。uci 里没这一项（老配置）就不传，用二进制里的默认名，
+	# 这样脚本里不必留任何人的主机名当兜底
+	v=$(get title) && [ -n "$v" ] && procd_append_param command -title "$v"
+	v=$(get interval) && [ -n "$v" ] && procd_append_param command -interval "$v"
+	v=$(get pixfmt) && [ -n "$v" ] && procd_append_param command -pixfmt "$v"
+	v=$(get font_light) && [ -n "$v" ] && procd_append_param command -font-light "$v"
+	v=$(get font_normal) && [ -n "$v" ] && procd_append_param command -font-normal "$v"
+	v=$(get font_bold) && [ -n "$v" ] && procd_append_param command -font-bold "$v"
+	v=$(get fnos_host) && [ -n "$v" ] && procd_append_param command -fnos-host "$v"
+	v=$(get fnos_user) && [ -n "$v" ] && procd_append_param command -fnos-user "$v"
+	v=$(get fnos_key) && [ -n "$v" ] && procd_append_param command -fnos-key "$v"
+	v=$(get fnos_mon) && [ -n "$v" ] && procd_append_param command -fnos-mon "$v"
+	# 页面上勾的"显示哪几个分组"存这个文件；uci 里没这项时用程序默认路径
+	v=$(get groups_file) && [ -n "$v" ] && procd_append_param command -groups-file "$v"
+	v=$(get proxy) && [ -n "$v" ] && procd_append_param command -proxy "$v"
+	# iPad 面板机（iOS 9）：留空就不探
+	v=$(get ipad_host) && [ -n "$v" ] && procd_append_param command -ipad-host "$v"
+	v=$(get ipad_user) && [ -n "$v" ] && procd_append_param command -ipad-user "$v"
+	v=$(get ipad_key) && [ -n "$v" ] && procd_append_param command -ipad-key "$v"
+	# iPad 那块屏：局域网只读接口。0/空 = 不起服务
+	v=$(get http_port) && [ -n "$v" ] && [ "$v" != "0" ] && procd_append_param command -http "$v"
+	v=$(get http_bind) && [ -n "$v" ] && procd_append_param command -http-bind "$v"
+	# 页面遥控器（切节点/切模式）：默认关，开了要带 uci 里的 control_token
+	[ "$(get control)" = "1" ] && procd_append_param command -control
+	v=$(get control_token) && [ -n "$v" ] && procd_append_param command -token "$v"
+	[ "$(get egress)" = "0" ] && procd_append_param command -no-egress
+	# 全屏网页的状态栏样式（black / translucent），改完重新打开桌面图标就生效
+	v=$(get status_bar) && [ -n "$v" ] && procd_append_param command -status-bar "$v"
+
+	# 崩溃自愈：1 分钟内超过 5 次就不再拉，避免坏二进制无限重启
+	procd_set_param respawn 60 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_set_param nice 15
+	# 一轮采集最坏情况是 fnOS SSH 超时 + logread，默认几秒不够，procd 会改发
+	# SIGKILL，那时候屏幕清理（交还控制台 + 刷黑帧缓冲）一行都跑不到
+	procd_set_param term_timeout 20
+	procd_close_instance
+}
+
+reload_service() {
+	# LuCI 的"保存并应用"走的就是这条路。参数全在命令行上，
+	# procd 自己 reload 不会改这些，必须停一次再起
+	stop
+	start
+}
+
+service_started() {
+	# 熄屏策略在面板里已经关掉了，这里再确认一次背光
+	echo 0 >/sys/class/graphics/fb0/blank 2>/dev/null
+}
+
+service_stopped() {
+	restore_console
+}

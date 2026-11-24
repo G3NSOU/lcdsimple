@@ -1,0 +1,47 @@
+config panel 'main'
+	# 面板名字：屏幕顶栏的大字、网页标题、iPad 桌面图标都用它。
+	# 这是产品名而不是机器事实，所以给得起默认值；想改成自己家的词就改这一行
+	option title 'Regisseur'
+	# 总开关：0 时 init.d 直接不起进程，屏幕交还控制台、网页也停
+	option enabled '1'
+	# 屏幕输出：0 = 不写 /dev/fb0、也不摘 fbcon，只留 iPad 网页（打算用 iPad 替掉显示器就关这个）
+	option screen '1'
+	# 刷新间隔（秒）。3 秒够看，再快也只是让折线更密
+	option interval '3'
+	# 帧缓冲字节序：i915 的 32bpp 一般是 bgra；屏幕红蓝反了才改 rgba
+	option pixfmt 'bgra'
+	option font_light '/etc/routerpanel/SHS-Light.ttf'
+	option font_normal '/etc/routerpanel/SHS-Normal.ttf'
+	option font_bold '/etc/routerpanel/SHS-Bold.ttf'
+	# fnOS（飞牛）虚拟机：地址和用户一律留空由你自己填。
+	# 留空 = 这块不探，卡片上写"未配置"。这里不给任何默认值——
+	# 每家的网段、每台 NAS 的用户名都不一样，预置一个就是把别人的环境发给所有人。
+	# 要探的话填虚拟机内网 IP + 一个只读用户，密钥在 /etc/routerpanel/id_panel（公钥得自己放进 NAS 的 authorized_keys）
+	option fnos_host ''
+	option fnos_user ''
+	option fnos_key '/etc/routerpanel/id_panel'
+	# qemu monitor socket：留空就用宿主 qemu 进程判断虚拟机在不在跑，填了更准
+	option fnos_mon ''
+	# 出口 IP 探测：留空就按"本机发一次"来测（内核在跑时这条路本来就被透明接管）。
+	# 只有想强制走某个代理口时才填，填了会排在探测顺序最前面
+	option proxy ''
+	option egress '1'
+	# iPad 局域网页面端口：只读、不鉴权，所以默认只绑 br-lan，绝不监听 WAN
+	option http_port '8788'
+	# 留空 = 自动取 uci network.lan.ipaddr；要固定成某个地址（或域名）就写在这里
+	option http_bind ''
+	# 把 iPad 当遥控器：1 = 允许页面上切模式、开关 OpenClash、选显示哪几个分组，需要 control_token
+	option control '0'
+	# 留空时程序会自动生成一个并写回这里
+	option control_token ''
+	# iPad 面板机自身状态：30 秒一轮 SSH 读系统信息。留空 ipad_host 就完全不探。
+	# 密钥默认复用 id_panel（公钥要自己写进设备的 /var/root/.ssh/authorized_keys）
+	option ipad_host ''
+	option ipad_user 'root'
+	option ipad_key '/etc/routerpanel/id_ipad'
+	# 卡片"其他分组"显示哪几个分组名，存在这个文件里（一行一个，页面上勾）：
+	# 不用 uci 是因为分组名是各家 yaml 里的自由文本，中文空格引号都可能出现
+	option groups_file '/etc/routerpanel/groups'
+	# 全屏网页（桌面图标）的状态栏：black=不透明黑；translucent=内容顶到状态栏下面，
+	# 由页面自己把那 20px 涂黑。iOS 9 实测 translucent 无效（栏还是系统画的），新系统可试
+	option status_bar 'black'

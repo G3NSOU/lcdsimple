@@ -1,0 +1,89 @@
+<fieldset class="cbi-section">
+	<legend><%:状态%></legend>
+	<div class="cbi-section-node">
+		<div class="cbi-value">
+			<label class="cbi-value-title"><%:面板进程%></label>
+			<div class="cbi-value-field">
+				<% if self.running then %>
+				<span style="color:#00a94f;font-weight:bold"><%:运行中%></span>
+				<% else %>
+				<span style="color:#c41d1d;font-weight:bold"><%:已停止%></span>
+				<% end %>
+			</div>
+		</div>
+		<div class="cbi-value">
+			<label class="cbi-value-title"><%:屏幕输出%></label>
+			<div class="cbi-value-field">
+				<% if not self.running then %>
+				<span style="color:#8c9196"><%:未运行%></span>
+				<% elseif self.screen == "0" then %>
+				<span style="color:#8c9196"><%:已关闭，只用网页%></span>
+				<% else %>
+				<span style="color:#00a94f"><%:输出中%></span>
+				<% end %>
+			</div>
+		</div>
+		<div class="cbi-value">
+			<label class="cbi-value-title"><%:iPad 网页%></label>
+			<div class="cbi-value-field">
+				<% if self.url ~= "" then %>
+				<a href="<%=self.url%>" target="_blank" rel="noreferrer"><%=self.url%></a>
+				<% else %>
+				<span style="color:#8c9196"><%:未启用（端口留空或进程没起来）%></span>
+				<% end %>
+			</div>
+		</div>
+		<div class="cbi-value">
+			<label class="cbi-value-title"><%:代理与出口%></label>
+			<div class="cbi-value-field">
+				<%
+					local cl = self.clash
+					local eg = self.egress
+					local out
+					if cl.Running then
+						out = "<span style=\"color:#00a94f\">OpenClash 运行中</span> · 模式 "
+						local mode = cl.Mode or ""
+						if mode == "rule" then out = out .. "规则"
+						elseif mode == "global" then out = out .. "全局"
+						elseif mode == "direct" then out = out .. "直连"
+						else out = out .. mode end
+						if eg.IP then out = out .. " · 出口 " .. eg.IP .. " " .. (eg.CC or "") end
+						if eg.CN then out = out .. " <span style=\"color:#ff911e;font-weight:bold\">已回到大陆</span>" end
+					elseif cl.Installed then
+						out = "<span style=\"color:#ff911e\">OpenClash 已停止</span>"
+					else
+						out = "<span style=\"color:#8c9196\">没取到（网页端口没开？）</span>"
+					end
+				%>
+				<%=out%>
+			</div>
+		</div>
+		<div class="cbi-value">
+			<label class="cbi-value-title"><%:iPad 面板机%></label>
+			<div class="cbi-value-field">
+				<%
+					local ip = self.ipad
+					local out
+					if not ip.Configured then
+						out = "<span style=\"color:#8c9196\">未配置地址</span>"
+					elseif ip.PageOK then
+						out = "<span style=\"color:#00a94f\">正在显示</span>"
+					elseif not ip.On then
+						out = "<span style=\"color:#c41d1d\">SSH 不通</span>"
+					elseif not ip.Safari and not ip.Clip then
+						out = "<span style=\"color:#ff911e\">页面没打开，去点一下图标</span>"
+					else
+						out = "<span style=\"color:#ff911e\">页面停止刷新（熄屏或被挂后台）</span>"
+					end
+				%>
+				<%=out%>
+			</div>
+		</div>
+	</div>
+	<div class="cbi-value cbi-value-last">
+		<label class="cbi-value-title"><%:说明%></label>
+		<div class="cbi-value-field" style="font-size:12px;color:#8c9196">
+			<%:关掉「屏幕输出」再保存并应用，显示器就可以拔了；采集和网页照跑，不写帧缓冲也不占控制台。屏幕上的日志栏和这里的状态是同一份数据。%>
+		</div>
+	</div>
+</fieldset>

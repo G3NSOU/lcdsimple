@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>html,body{background:#090a0b}</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Regisseur">
+<meta name="theme-color" content="#090a0b">
+<meta name="format-detection" content="telephone=no">
+<!-- 启动图：桌面图标点开时，页面第一帧之前 iOS 铺的是白底（没有启动图就退回上次的截图），
+     那一瞬状态栏那条也跟着白。iOS 9 只按 media 挑图，尺寸必须一个像素都不差，
+     所以按 标准/视网膜 × 横/竖 四张备齐。 -->
+<link rel="apple-touch-startup-image" media="(device-width: 768px) and (orientation: landscape) and (-webkit-device-pixel-ratio: 1)" href="/assets/ipad-startup-land.png">
+<link rel="apple-touch-startup-image" media="(device-width: 768px) and (orientation: portrait) and (-webkit-device-pixel-ratio: 1)" href="/assets/ipad-startup-port.png">
+<link rel="apple-touch-startup-image" media="(device-width: 768px) and (orientation: landscape) and (-webkit-device-pixel-ratio: 2)" href="/assets/ipad-startup-land2x.png">
+<link rel="apple-touch-startup-image" media="(device-width: 768px) and (orientation: portrait) and (-webkit-device-pixel-ratio: 2)" href="/assets/ipad-startup-port2x.png">
+<!-- 桌面图标：Safari「添加到主屏幕」只读这里的 link，描述文件里那份 base64 图标它拿不到，
+     所以页面不发图标 = 主屏幕上一个白纸。四档备齐：非视网膜 iPad 要 76，
+     视网膜 iPad 要 152/180；不带 sizes 的那条放最前面，给不认 sizes 的老 WebKit 兜底。 -->
+<link rel="apple-touch-icon" href="/assets/ipad-152.png">
+<link rel="apple-touch-icon" sizes="76x76" href="/assets/ipad-76.png">
+<link rel="apple-touch-icon" sizes="120x120" href="/assets/ipad-120.png">
+<link rel="apple-touch-icon" sizes="152x152" href="/assets/ipad-152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/ipad-180.png">
+<title>Regisseur · 网络状态</title>
+<style>
+/* 颜色契约（与帧缓冲面板同一套）：
+   正常 = 白/灰；OpenClash、fnOS 运行正常 = 绿；一般提示/警告 = 橙；显著错误 = 正红。
+   没有蓝紫，没有渐变，长亮屏幕靠深灰底省电。 */
+* { -webkit-box-sizing: border-box; box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #090a0b; color: #d0d3d7;
+  font: 13px/1.45 "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Heiti SC", sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+/* 状态栏走实底 black：内容排在它下面，不再预留 20px（预留了反而像顶部空了一条） */
+#app { padding: 10px 18px 10px; height: 100%; display: -webkit-box; display: -webkit-flex; display: flex;
+       -webkit-flex-direction: column; flex-direction: column; }
+
+header { display: -webkit-box; display: -webkit-flex; display: flex;
+         -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+         padding: 0 2px 12px; }
+.brand { font-size: 21px; font-weight: 700; color: #f0f1f2; letter-spacing: .2px; }
+.sub { font-size: 11px; color: #585e64; margin-top: 3px; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; }
+/* 左边这列可以被压窄（压窄时省略号收尾），并且封顶：不给上限的话
+   型号一长就把气泡挤出可视区，而气泡是被"藏掉"的，看不出来少了一枚 */
+header > div:first-child { min-width: 0; overflow: hidden; max-width: 46%; }
+/* 三枚气泡始终一行：flex 项可以被压窄（min-width:0），但不许换行。
+   以前左边那列一长，第三枚就掉到第二行压住日期，看着像版式坏了。 */
+.pills { -webkit-flex: 1; flex: 1; min-width: 0; text-align: center;
+         white-space: nowrap; overflow: hidden; }
+.pill { display: inline-block; font-size: 11px; color: #a8adb2; background: #1b1d20;
+        border: 1px solid #32363a; -webkit-border-radius: 999px; border-radius: 999px;
+        padding: 3px 9px; margin: 0 3px; white-space: nowrap; }
+.pill b { color: #f0f1f2; font-weight: 600; }
+.pill .dot { display: inline-block; width: 6px; height: 6px; margin-right: 5px; vertical-align: 1px;
+             -webkit-border-radius: 999px; border-radius: 999px; background: #585e64; }
+.dot.live { background: #d0d3d7; } /* iPad 页面活着：正常态按约定是白/灰，不占绿色 */
+.dot.ok { background: #26c86a; } .dot.warn { background: #ff911e; } .dot.bad { background: #ff3333; }
+.dot.idle { background: #585e64; }
+.clock { text-align: right; }
+.clock .t { font-size: 27px; font-weight: 200; color: #f0f1f2; letter-spacing: .5px; }
+.clock .d { font-size: 11px; color: #585e64; margin-top: 1px; }
+
+.grid { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap;
+        margin: 0 -5px; }
+.cell { padding: 5px; display: -webkit-box; display: -webkit-flex; display: flex;
+        -webkit-flex-direction: column; flex-direction: column; }
+.c3 { width: 25%; } .c4 { width: 33.3333%; } .c5 { width: 41.6667%; } .c9 { width: 75%; } .c12 { width: 100%; }
+.row2 { -webkit-flex: 1; flex: 1; }
+
+/* 别用 height:100%：cell 的高度是被 flex 拉伸出来的、不是"确定值"，
+   iOS 9 解析不出百分比就退回内容高度，于是四张卡只有 WAN 那张长高，其它三张矮一截。
+   改成 cell 自己是列向 flex、card 用 flex:1 顶满，老 WebKit 也认这个写法。 */
+.card { background: #111214; border: 1px solid #22262a; -webkit-border-radius: 14px; border-radius: 14px;
+        padding: 11px 12px; -webkit-flex: 1; flex: 1; position: relative; overflow: hidden;
+        display: -webkit-box; display: -webkit-flex; display: flex;
+        -webkit-flex-direction: column; flex-direction: column; }
+.card > .foot { margin-top: auto; } /* 页脚压到底，多出来的空白落在中间而不是四周 */
+.chead { display: -webkit-box; display: -webkit-flex; display: flex;
+         -webkit-box-align: center; -webkit-align-items: center; align-items: center; margin-bottom: 8px; }
+.ctitle { font-size: 14px; font-weight: 700; color: #f0f1f2; }
+.cmeta { font-size: 10px; color: #585e64; margin-left: 6px; -webkit-flex: 1; flex: 1;
+         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label { font-size: 10px; color: #7e848a; letter-spacing: .3px; }
+.value { font-size: 27px; font-weight: 200; color: #f0f1f2; line-height: 1.1; }
+.value .unit { font-size: 12px; font-weight: 400; color: #7e848a; margin-left: 2px; }
+.value.mid { font-size: 19px; white-space: nowrap; }
+.value.sm { font-size: 15px; font-weight: 400; color: #d0d3d7; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; }
+.foot { font-size: 10px; color: #585e64; margin-top: 7px; white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; }
+.hr { height: 1px; background: #22262a; margin: 8px 0; }
+
+.bar { height: 4px; background: #1b1d20; -webkit-border-radius: 999px; border-radius: 999px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: #d0d3d7; -webkit-border-radius: 999px; border-radius: 999px; }
+.bar i.warn { background: #ff911e; } .bar i.bad { background: #ff3333; }
+.cores { display: -webkit-box; display: -webkit-flex; display: flex; margin: 8px 0 0; }
+.cores span { -webkit-flex: 1; flex: 1; height: 22px; margin-right: 3px; background: #1b1d20;
+              -webkit-border-radius: 3px; border-radius: 3px; position: relative; overflow: hidden; }
+.cores span i { position: absolute; left: 0; bottom: 0; width: 100%; height: 0; background: #d0d3d7; }
+.cores span i.warn { background: #ff911e; } .cores span i.bad { background: #ff3333; }
+
+.kv { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap;
+      margin: 0 -8px; }
+.kv .k { width: 33.3333%; padding: 0 8px 7px; }
+.kv.k2 .k { width: 50%; } /* 这张卡在横屏只有 256 宽，三列会把"1小时53分"截成"1小时5…" */
+.kv .k .label { display: block; margin-bottom: 1px; }
+.kv .k .v { font-size: 15px; color: #f0f1f2; font-weight: 400; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; display: block; } /* 不给 display:block，省略号根本不生效，两列就会压字 */
+.spec { display: -webkit-box; display: -webkit-flex; display: flex; font-size: 11px; padding: 3px 0;
+        border-bottom: 1px solid #191b1e; }
+.spec .sk { color: #7e848a; }
+.spec .sv { -webkit-flex: 1; flex: 1; text-align: right; color: #a8adb2;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; }
+/* 横屏 768 高：第 2 排是高度大户，分组只留两行，各处留白收紧，保证不靠滚动 */
+@media (max-height: 800px) {
+  /* 横屏带着 Safari 上下栏只剩 660：页脚也得落在这一屏里，所以每处再让 2~6px */
+  #app { padding: 8px 14px 2px; }
+  footer { padding-top: 3px; }
+  header { padding-bottom: 6px; }
+  .cell { padding: 4px; }
+  .card { padding: 9px 11px; }
+  .chead { margin-bottom: 3px; }
+  .kv .k { padding-bottom: 4px; }
+  .kv .k { padding-bottom: 3px; }
+  .spec { padding: 2px 0; }
+  .foot { margin-top: 4px; }
+  canvas { height: 30px; }
+}
+/* 横屏还带着 Safari 上下两条栏时只剩 660：页脚必须在屏内，这里再抠出 20~25px。
+   只作用于窄高度，全屏（1024x768）那套留白不动，免得把已经铺满的版面改松。 */
+@media (max-height: 700px) and (min-width: 821px) {
+  .cell { padding: 3px; }
+  .card { padding: 8px 11px; }
+  .row1 .value { font-size: 22px; }
+  .row1 .cores span { height: 15px; }
+  .row1 canvas { height: 26px; }
+  .kv .k { padding-bottom: 2px; }
+  .row3 .kv .k { padding-bottom: 1px; }
+  .value.sm.wrap { line-height: 1.2; }
+  /* "其他分组"是 OpenClash 卡里最长的一段，而它写的就是上面"分组"那一行的其它成员；
+     屏不够高先让它让位，全屏（768 高）那一档仍然完整显示 */
+  .grp-extra { display: none; }
+}
+.node { font-size: 20px; font-weight: 400; color: #f0f1f2; white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; margin: 2px 0 1px; }
+canvas { display: block; width: 100%; height: 40px; margin-top: 6px; }
+
+.devlist { -webkit-flex: 1; flex: 1; overflow: hidden; }
+.dev { padding: 4px 0; border-bottom: 1px solid #191b1e; }
+.dev .l1 { display: -webkit-box; display: -webkit-flex; display: flex; }
+.dev .nm { font-size: 12px; color: #f0f1f2; -webkit-flex: 1; flex: 1; white-space: nowrap;
+           overflow: hidden; text-overflow: ellipsis; }
+.dev .rt { font-size: 11px; color: #a8adb2; white-space: nowrap; }
+.dev .l2 { display: -webkit-box; display: -webkit-flex; display: flex; font-size: 10px; color: #585e64; }
+.dev .l2 .ip { -webkit-flex: 1; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev.off .nm { color: #7e848a; }
+.logwrap { -webkit-flex: 1; flex: 1; overflow: hidden; }
+.log { font: 11px/1.5 Menlo, Monaco, Courier, monospace; color: #7e848a; white-space: nowrap;
+       overflow: hidden; text-overflow: ellipsis; padding: 1px 0; }
+.log .tm { color: #585e64; margin-right: 6px; }
+.log.warn { color: #ff911e; } .log.bad { color: #ff3333; }
+footer { display: -webkit-box; display: -webkit-flex; display: flex; font-size: 10px; color: #585e64;
+         padding: 8px 2px 0; }
+footer .sp { -webkit-flex: 1; flex: 1; }
+footer #fupd, footer #fres { margin-left: 14px; }
+/* 竖屏 768 宽：第一排两行两列（他要的排法），高度从留白和重复信息里省，不改排列 */
+@media (max-width: 820px) {
+  /* 768x916（带着 Safari 上下栏）是硬边界，超一行就得滚动，长亮屏幕不该靠滚动 */
+  #app { padding: 10px 10px 2px; }
+  header { padding-bottom: 4px; }
+  .cell { padding: 3px; }
+  .c3 { width: 50%; }
+  .row1 .value { font-size: 19px; } .row1 .value.mid { font-size: 16px; }
+  .row1 .cores span { height: 12px; } .row1 canvas { height: 22px; }
+  .row1 .card { padding: 7px 9px; }
+  .row2 .cell { width: 100%; }
+  .row2 .cell:nth-child(2), .row2 .cell:nth-child(3) { width: 50%; }
+  .row2 { -webkit-flex: none; flex: none; }
+  .value { font-size: 21px; } .value.mid { font-size: 16px; } .node { font-size: 17px; margin: 1px 0 0; }
+  .card { padding: 8px 10px; }
+  .cores span { height: 16px; }
+  .kv .k { padding-bottom: 3px; } /* 保持默认三列：两列会让 OpenClash/fnOS 各多出一整行 */
+  .chead { margin-bottom: 4px; }
+  .spec { padding: 2px 0; }
+  .foot { margin-top: 4px; }
+  /* 竖屏第 3 排：iPad 卡占 42%，日志挤到 58%——日志本来就只显示两行，截一点无所谓 */
+  .row3 .c3 { width: 42%; } .row3 .c9 { width: 58%; }
+  /* 出口地址在竖屏隐掉：上面"网络出口"那张卡已经写了同一个 IP，重复一行就把页脚挤出屏幕 */
+  .n-hide { display: none; }
+  /* 分组那一列是纯文字对照表，行距比别处的 .spec 再紧 1px：
+     五行省十来像素，正好就是多出来的那第五行。别的地方不动。 */
+  #groups .spec { padding: 2px 0; }
+  /* 竖屏顶栏：三枚气泡都要在、都只许一行。以前把 OpenClash/fnOS 两枚藏掉，
+     理由是"放不下比不显示更难看"——但那是把放不下当成不需要显示，
+     代理和 NAS 的状态恰恰是最不该藏的两条。改成收字号 + 左列再让一步。 */
+  header > div:first-child { max-width: 40%; }
+  .clock .t { font-size: 22px; }
+  .pill { padding: 2px 6px; font-size: 9px; margin: 0 2px; }
+  footer { padding-top: 4px; }
+}
+.card.warn { border-color: #ff911e; } /* 出口 IP 落回大陆境内：警告级，按约定用橙描边，不升正红 */
+/* 横屏这张卡中间有富余，归属写全比截断有用：允许折到第三行，不用省略号吞掉后半段 */
+.value.sm.wrap { white-space: normal; line-height: 1.3; }
+.st-ok { color: #26c86a; } .st-warn { color: #ff911e; } .st-bad { color: #ff3333; } .st-mute { color: #7e848a; }
+#stale { position: absolute; left: 12px; top: 11px; font-size: 10px; color: #ff911e; display: none; }
+.sw { font-size: 10px; color: #7e848a; border: 1px solid #32363a; -webkit-border-radius: 999px;
+      border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.sw.on { color: #f0f1f2; border-color: #585e64; }
+/* 面板操作行：只有开关插件和切模式两件事，节点切换按他的要求整个拿掉了 */
+.ops { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap;
+       flex-wrap: wrap; -webkit-align-items: center; align-items: center; margin: 2px 0 6px; }
+.op { font-size: 11px; color: #d0d3d7; border: 1px solid #32363a; -webkit-border-radius: 999px;
+      border-radius: 999px; padding: 4px 11px; margin: 2px 5px 2px 0; white-space: nowrap; }
+.op.on { color: #f0f1f2; border-color: #6b7178; background: #1b1d20; }
+.op.busy { color: #585e64; border-color: #22262a; }
+.op.off { border-color: #3a3f45; }
+#opnote { font-size: 10px; margin-left: 2px; }
+/* 日志来源标签：一眼看出这条是谁的日志 */
+.tag { font: 9px/1.4 Menlo, Monaco, Courier, monospace; color: #a8adb2; border: 1px solid #32363a;
+       -webkit-border-radius: 999px; border-radius: 999px; padding: 0 5px; margin-right: 6px; }
+.tag.me { color: #f0f1f2; border-color: #585e64; }
+#mask { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55);
+        display: none; z-index: 40; }
+/* 长亮屏幕的夜间降亮：盖一层黑，比调系统亮度可靠（这台机器没有环境光传感器） */
+#night { position: fixed; left: 0; top: 0; right: 0; bottom: 0; background: #000;
+         opacity: 0; display: none; pointer-events: none; z-index: 60; }
+#night.on { display: block; opacity: .38; }
+#offline { position: fixed; right: 14px; top: 22px; font-size: 10px; color: #ff911e; display: none; z-index: 61; }
+#mask.open { display: block; }
+/* 停 OpenClash 会掐断全部代理连接，一指尖接没了——这种动作先问一句。
+   模式切换不拦：那是随时能改回去的 */
+#ask { position: fixed; left: 50%; top: 50%; width: 296px; margin: -84px 0 0 -148px;
+       background: #14161a; border: 1px solid #3a3f45; -webkit-border-radius: 14px;
+       border-radius: 14px; padding: 14px 16px; display: none; z-index: 50; }
+#ask.open { display: block; }
+#ask .at { font-size: 15px; color: #f0f1f2; font-weight: 600; }
+#ask .ad { font-size: 11px; color: #a8adb2; margin-top: 6px; line-height: 1.45; }
+#ask .ab { margin-top: 13px; text-align: right; }
+#ask .ab .op { margin-left: 8px; }
+#ask .ab .go { color: #ff911e; border-color: #6b4a20; }
+/* 「显示哪几个分组」的选择框：分组名全部来自 OpenClash 当前的配置，代码里不预置任何名字。
+   点一下进/出，序号就是卡片里的顺序，第一个兼作卡片标题下那个「当前节点」。 */
+/* 「设置」入口就跟着「其他分组」那一行，字号和它一样（10px），只是能点。
+   不另开一个大按钮：这块屏常亮，显眼一点就多一次误触。 */
+.gset { font-size: 10px; color: #7e848a; border: 1px solid #32363a;
+        -webkit-border-radius: 999px; border-radius: 999px; padding: 0 7px; margin-left: 6px; }
+.gset:active { border-color: #585e64; color: #f0f1f2; }
+#pick { position: fixed; left: 50%; top: 50%; width: 330px;
+        -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%);
+        background: #14161a; border: 1px solid #3a3f45; -webkit-border-radius: 14px;
+        border-radius: 14px; padding: 13px 15px; display: none; z-index: 50; }
+#pick.open { display: block; }
+#pick .pt { font-size: 14px; color: #f0f1f2; font-weight: 600; }
+#pick .pd { font-size: 10.5px; color: #a8adb2; margin-top: 5px; line-height: 1.5; }
+/* 列表自己滚：分组多的人家能有二三十个，把弹窗撑出屏幕就等于没这个功能 */
+#picklist { max-height: 300px; overflow-y: scroll; -webkit-overflow-scrolling: touch;
+            margin-top: 8px; padding-right: 2px; }
+#picklist .g { font-size: 12px; color: #d0d3d7; border: 1px solid #32363a;
+       -webkit-border-radius: 9px; border-radius: 9px; padding: 7px 9px; margin-bottom: 6px;
+       display: -webkit-box; display: -webkit-flex; display: flex;
+       -webkit-box-align: center; -webkit-align-items: center; align-items: center; }
+#picklist .g .no { color: #585e64; font-size: 10px; width: 13px; }
+#picklist .g .n { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1;
+       overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#picklist .g .nw { font-size: 10px; color: #7e848a; margin-left: 8px; max-width: 116px;
+       overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#picklist .g.on { color: #f0f1f2; background: #122019; border-color: #2f6b4a; }
+#picklist .g.on .no { color: #35c66a; }
+#pick .pb { margin-top: 10px; text-align: right; }
+#pick .pb .op { margin-left: 8px; }
+#pick .pb .go { color: #ff911e; border-color: #6b4a20; }
+#pick .pnote { font-size: 10.5px; color: #a8adb2; margin-top: 8px; text-align: left; }
+/* 令牌框：不用 window.prompt——iOS 9 的全屏网页里系统输入框可能被吞掉，
+   点了"保存"没地方输密码就等于没反应，正是最容易被当成假死的那种。
+   框贴在上方：软键盘从下面弹出来，居中的框会被挡住。 */
+#tok { position: fixed; left: 50%; top: 74px; width: 300px;
+       -webkit-transform: translateX(-50%); transform: translateX(-50%);
+       background: #14161a; border: 1px solid #3a3f45; -webkit-border-radius: 14px;
+       border-radius: 14px; padding: 14px 16px; display: none; z-index: 50; }
+#tok.open { display: block; }
+#tok .at { font-size: 15px; color: #f0f1f2; font-weight: 600; }
+#tok .ad { font-size: 11px; color: #a8adb2; margin-top: 6px; line-height: 1.45; }
+#tok input { width: 100%; margin-top: 10px; background: #0d0f12; border: 1px solid #32363a;
+       -webkit-border-radius: 8px; border-radius: 8px; color: #f0f1f2; font-size: 13px;
+       padding: 8px 10px; -webkit-box-sizing: border-box; box-sizing: border-box; }
+#tok .ab { margin-top: 11px; text-align: right; }
+#tok .ab .op { margin-left: 8px; }
+#tok .ab .go { color: #ff911e; border-color: #6b4a20; }
+#tok code { font-size: 10px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <div class="brand" id="brand">Regisseur</div>
+      <div class="sub" id="sysline">正在连接路由器…</div>
+    </div>
+    <div class="pills" id="pills"></div>
+    <div class="clock"><div class="t" id="clk">--:--</div><div class="d" id="date">----</div></div>
+  </header>
+
+  <div class="grid row1">
+    <div class="cell c3"><div class="card">
+      <div class="label">CPU 占用</div>
+      <div class="value"><span id="cpu">--</span><span class="unit">%</span></div>
+      <div class="cores" id="cores"></div>
+      <div class="foot" id="cpuf">负载 —</div>
+    </div></div>
+    <div class="cell c3"><div class="card">
+      <div class="label">内存占用</div>
+      <div class="value"><span id="mem">--</span><span class="unit">%</span></div>
+      <div class="bar" style="margin-top:14px"><i id="membar"></i></div>
+      <div class="foot" id="memf">—</div>
+    </div></div>
+    <div class="cell c3"><div class="card">
+      <div class="label">WAN 流量</div>
+      <div class="value mid"><span id="wanrx" style="color:#f0f1f2">↓ —</span> <span id="wantx" style="color:#a8adb2">↑ —</span></div>
+      <canvas id="spark" height="40"></canvas>
+      <div class="foot" id="wanf">—</div>
+    </div></div>
+    <div class="cell c3"><div class="card" id="egcard">
+      <div class="label">网络出口</div>
+      <div class="value mid" id="egip">—</div>
+      <div class="value sm wrap" id="egloc" style="margin-top:6px">—</div>
+      <div class="foot" id="egf">—</div>
+    </div></div>
+  </div>
+
+  <div class="grid row2">
+    <div class="cell c4"><div class="card">
+      <div id="stale">数据已停止更新</div>
+      <div class="chead"><span class="ctitle">OpenClash</span><span class="cmeta" id="clv">—</span><span class="pill" id="clpill"><span class="dot idle"></span>—</span></div>
+      <div class="label">当前节点</div>
+      <div class="node" id="node">—</div>
+      <div class="spec" id="groupline"><span class="sk">分组</span><span class="sv" id="group">—</span></div>
+      <div class="spec n-hide"><span class="sk">出口地址</span><span class="sv" id="eg2">—</span></div>
+      <div class="kv" style="margin-top:5px">
+        <div class="k"><span class="label">模式</span><span class="v" id="mode">—</span></div>
+        <div class="k"><span class="label">节点数</span><span class="v" id="ptotal">—</span></div>
+        <div class="k"><span class="label">活跃连接</span><span class="v" id="conn">—</span></div>
+        <div class="k"><span class="label">节点延迟</span><span class="v" id="lat">—</span></div>
+        <div class="k"><span class="label">累计下行</span><span class="v" id="dtot">—</span></div>
+        <div class="k"><span class="label">累计上行</span><span class="v" id="utot">—</span></div>
+      </div>
+      <div class="ops" id="ops" style="display:none">
+        <span class="op" id="opClash">停止 OpenClash</span>
+        <span class="op" id="op_rule">规则</span><span class="op" id="op_global">全局</span><span class="op" id="op_direct">直连</span>
+        <span id="opnote"></span>
+      </div>
+      <div class="label grp-extra" style="margin:2px 0 3px"><span id="groupt">其他分组</span><span class="gset" id="op_groups">设置</span></div>
+      <div id="groups" class="grp-extra"></div>
+    </div></div>
+    <div class="cell c4"><div class="card">
+      <div class="chead"><span class="ctitle">fnOS 飞牛</span><span class="cmeta" id="fnip">—</span><span class="pill" id="Fnpill"><span class="dot idle"></span>—</span></div>
+      <div class="kv">
+        <div class="k"><span class="label">CPU 利用率</span><span class="v" id="fncpu">—</span></div>
+        <div class="k"><span class="label">内存利用率</span><span class="v" id="fnmem">—</span></div>
+        <div class="k"><span class="label">已运行</span><span class="v" id="fnup">—</span></div>
+        <div class="k"><span class="label">读取</span><span class="v" id="fnrd">—</span></div>
+        <div class="k"><span class="label">写入</span><span class="v" id="fnwr">—</span></div>
+        <div class="k"><span class="label" id="fngpul">P620 显卡</span><span class="v" id="fngpu">—</span></div>
+      </div>
+      <div class="spec" style="border:0"><span class="sk">存储卷</span><span class="sv" id="mdf">—</span></div>
+      <div id="vols"></div>
+    </div></div>
+    <div class="cell c4"><div class="card">
+      <div class="chead"><span class="ctitle">接入设备</span><span class="cmeta" id="devmeta">—</span></div>
+      <div class="devlist" id="devs"></div>
+    </div></div>
+  </div>
+
+  <div class="grid row3">
+    <div class="cell c3"><div class="card">
+      <div class="chead"><span class="ctitle">线路质量</span><span class="cmeta" id="lkmeta">—</span><span class="pill" id="Lkpill"><span class="dot idle"></span>—</span></div>
+      <div class="kv k2">
+        <div class="k"><span class="label">网关往返</span><span class="v" id="lkgw">—</span></div>
+        <div class="k"><span class="label">丢包</span><span class="v" id="lkloss">—</span></div>
+        <div class="k"><span class="label">解析耗时</span><span class="v" id="lkres">—</span></div>
+        <div class="k"><span class="label">今日重拨</span><span class="v" id="lkdial">—</span></div>
+      </div>
+      <div class="foot" id="lkf">—</div>
+    </div></div>
+    <div class="cell c9"><div class="card">
+      <div class="chead"><span class="ctitle">系统日志</span><span class="cmeta">iStore · OpenClash · fnOS · 面板操作</span><span class="cmeta" id="logn" style="text-align:right;margin:0"></span></div>
+      <div class="logwrap" id="logs"></div>
+    </div></div>
+  </div>
+
+
+  <div id="mask"></div>
+  <div id="ask">
+    <div class="at" id="askt">停止 OpenClash？</div>
+    <div class="ad" id="askd">插件一停，所有走代理的连接立刻断掉；再点一次启动大约要等 15 秒才恢复。</div>
+    <div class="ab"><span class="op" id="askno">取消</span><span class="op go" id="askyes">确定停止</span></div>
+  </div>
+
+  <div id="pick">
+    <div class="pt">卡片上显示哪几个分组</div>
+    <div class="pd">点一下选上/取消，前面的数字就是卡片里的排列顺序；第一个兼作卡片标题下那个「当前节点」。
+      这里的名字是从 OpenClash 现在的配置里读出来的，没有预置。</div>
+    <div id="picklist"></div>
+    <div class="pnote" id="picknote"></div>
+    <div class="pb"><span class="op" id="pickclear">清空</span><span class="op" id="pickno">取消</span><span class="op go" id="picksave">保存</span></div>
+  </div>
+
+  <div id="tok">
+    <div class="at">控制令牌</div>
+    <div class="ad">页面上的操作要令牌。路由器上查：<code>uci get routerpanel.main.control_token</code></div>
+    <input type="password" id="tokin" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="ab"><span class="op" id="tokno">取消</span><span class="op go" id="tokyes">确定</span></div>
+  </div>
+
+  <div id="night"></div>
+  <div id="offline">离线 · 显示上次数据</div>
+
+  <footer><span id="fver">routerpanel</span><span class="sp"></span><span id="fupd">—</span><span id="fres">每 3 秒刷新</span><span id="fit" style="margin-left:14px"></span></footer>
+</div>
+
+<script>
+/* iOS 9.3.5 Safari：只有 ES5。没有 fetch / 箭头函数 / let / CSS Grid / Service Worker。
+   数据走 EventSource（浏览器原生支持），断流就退回 XHR 轮询。 */
+(function () {
+  'use strict';
+
+  var MAXH = 60;               // 折线保留的采样点
+  var STALE_MS = 60000;        // 超过这个时间没数据就整页重载（老 Safari 会挂起长连接）
+  var hist = { rx: [], tx: [] };
+  var lastMsg = 0, es = null, pollTimer = null, esFail = 0;
+  var el = function (id) { return document.getElementById(id); };
+  var setText = function (id, s) { var e = el(id); if (e) { e.textContent = s; } };
+  var setHTML = function (id, s) { var e = el(id); if (e) { e.innerHTML = s; } };
+
+  function num(v, d) { if (v === null || v === undefined || isNaN(v)) { return d; } return v; }
+
+  function bytes(v) {
+    v = num(v, 0);
+    if (v >= 1099511627776) { return (v / 1099511627776).toFixed(v / 1099511627776 >= 10 ? 0 : 1) + 'TB'; }
+    if (v >= 1073741824) { return (v / 1073741824).toFixed(v / 1073741824 >= 10 ? 0 : 1) + 'GB'; }
+    if (v >= 1048576) { return (v / 1048576).toFixed(0) + 'MB'; }
+    if (v >= 1024) { return (v / 1024).toFixed(0) + 'KB'; }
+    return Math.round(v) + 'B';
+  }
+  // 百分比：空转时 CPU 常年在 1~2%，写成整数会在 "1%" 和 "2%" 之间跳，
+  // 看着像抖动；小于 10 就留一位小数。
+  function pctv(p) {
+    p = num(p, 0);
+    if (p <= 0) { return '—'; }
+    return (p < 10 ? p.toFixed(1) : Math.round(p)) + '%';
+  }
+  // 每秒读写：读和写各占一栏，才放得下 "MB/s" 这种带单位的写法
+  function bps(v) { return bytes(v) + '/s'; }
+  function rate(bps) {
+    bps = num(bps, 0);
+    if (bps < 1000) { return Math.round(bps) + ' bps'; }
+    if (bps < 1000000) { return (bps / 1000).toFixed(bps < 100000 ? 1 : 0) + ' Kbps'; }
+    if (bps < 1000000000) { return (bps / 1000000).toFixed(bps < 10000000 ? 2 : 1) + ' Mbps'; }
+    return (bps / 1000000000).toFixed(2) + ' Gbps';
+  }
+  // 方块里放得下"107.3 Mbps ↑ 17.0 Mbps"，放不下两行；单位只在变化时写全
+  function rateShort(bps) {
+    bps = num(bps, 0);
+    if (bps < 1000) { return Math.round(bps) + 'bps'; }
+    if (bps < 1000000) { return (bps / 1000).toFixed(bps < 100000 ? 1 : 0) + 'K'; }
+    if (bps < 1000000000) { return (bps / 1000000).toFixed(bps < 10000000 ? 1 : 0) + 'M'; }
+    return (bps / 1000000000).toFixed(2) + 'G';
+  }
+  function dur(sec) {
+    sec = num(sec, 0);
+    if (sec < 60) { return Math.round(sec) + '秒'; }
+    var m = Math.floor(sec / 60);
+    if (m < 60) { return m + '分'; }
+    var h = Math.floor(m / 60);
+    if (h < 24) { return h + '小时' + (m % 60) + '分'; }
+    return Math.floor(h / 24) + '天' + (h % 24) + '小时';
+  }
+  var CC = { CN: '中国', JP: '日本', HK: '中国香港', US: '美国', SG: '新加坡', TW: '中国台湾',
+             KR: '韩国', DE: '德国', GB: '英国', FR: '法国', RU: '俄罗斯', MY: '马来西亚',
+             TH: '泰国', CA: '加拿大', NL: '荷兰', AU: '澳大利亚', IN: '印度', VN: '越南',
+             ID: '印度尼西亚', IT: '意大利', ES: '西班牙', SE: '瑞典', LU: '卢森堡' };
+  function ccName(cc) { return CC[cc] || cc || ''; }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function lvl(pct) { return pct >= 0.95 ? 'bad' : (pct >= 0.75 ? 'warn' : ''); }
+
+  // ---- 时钟：本地走秒，不依赖网络 ----
+  var WD = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  function tickClock() {
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    setText('clk', (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m);
+    setText('date', d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + WD[d.getDay()]);
+  }
+
+  // ---- 折线：一个 canvas 画下行/上行两条线 ----
+  var cv = el('spark'), cx = cv.getContext ? cv.getContext('2d') : null;
+  function drawSpark() {
+    if (!cx) { return; }
+    var dpr = window.devicePixelRatio || 1;
+    var w = cv.clientWidth || 280, h = 40;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx.clearRect(0, 0, w, h);
+    var all = hist.rx.concat(hist.tx), mx = 0, i;
+    for (i = 0; i < all.length; i++) { if (all[i] > mx) { mx = all[i]; } }
+    if (mx <= 0) { mx = 1; }
+    function line(arr, color, fill) {
+      var n = arr.length;
+      if (n < 2) { return; }
+      var step = w / (MAXH - 1);
+      var x0 = w - (n - 1) * step;
+      cx.beginPath();
+      for (var j = 0; j < n; j++) {
+        var x = x0 + j * step;
+        var y = h - 2 - (arr[j] / mx) * (h - 6);
+        if (j === 0) { cx.moveTo(x, y); } else { cx.lineTo(x, y); }
+      }
+      cx.strokeStyle = color; cx.lineWidth = 1.5; cx.stroke();
+      if (fill) {
+        cx.lineTo(x0 + (n - 1) * step, h); cx.lineTo(x0, h); cx.closePath();
+        cx.fillStyle = fill; cx.fill();
+      }
+    }
+    line(hist.rx, '#d0d3d7', 'rgba(208,211,215,0.07)');
+    line(hist.tx, '#7e848a', null);
+  }
+
+  // ---- 渲染 ----
+  function pill(id, text, tone) {
+    var e = el(id);
+    if (!e) { return; }
+    e.innerHTML = '<span class="dot ' + tone + '"></span>' + esc(text);
+  }
+
+  // setSysline：顶栏那行小字里，型号是唯一可以被折的字段。
+  // 系统版本、内核、运行时长是判断这台机器状态的核心，必须完整留下——
+  // 所以不是"整行超长就砍尾巴"（那样先没的正是运行时长），
+  // 而是先量一次，放不下就一档一档砍型号，砍到能放下为止。
+  function setSysline(p) {
+    var n = el('sysline');
+    if (!n) { return; }
+    var os = p.OSName || '', mo = p.Model || '';
+    var ke = p.Kernel ? ('kernel ' + p.Kernel) : '';
+    var up = '已运行 ' + dur(p.Uptime);
+    var cuts = [999, 34, 26, 20, 14, 8, 0], i, seg, seg2, t;
+    for (i = 0; i < cuts.length; i++) {
+      // 砍到 0 这一档就整段不要：再挂一个省略号在中间，看着像数据丢了
+      if (cuts[i] === 0) { seg = ''; }
+      else if (mo.length > cuts[i]) { seg = mo.substring(0, cuts[i]) + '\u2026'; }
+      else { seg = mo; }
+      // 型号被砍到空就整段不要：留一个光秃秃的"…"在中间，看着像数据丢了
+      seg2 = seg === '' ? null : seg;
+      t = [os, seg2, ke, up].join(' \u00b7 ').replace(/( \u00b7 ){2,}/g, ' \u00b7 ');
+      if (t.charAt(0) === ' ') { t = t.substring(3); }
+      n.textContent = t;
+      // clientWidth 为 0（还没布局）时别死循环，直接认下这一版
+      if (!n.clientWidth || n.scrollWidth <= n.clientWidth + 1 || cuts[i] === 0) { return; }
+    }
+  }
+
+  var lastClash = null;
+
+  var lastP = null;
+  function render(p) {
+    lastP = p;
+    var wan = p.Wan || {}, cl = p.Clash || {}, fn = p.Fnos || {}, eg = cl.Egress || {};
+
+    // 大字是面板名字（uci title / -title），没设过才用路由器主机名；主机名永远在那行小字里，
+    // 换了名字也不至于认不出这是哪台机器。系统/型号/内核都是实时取的，取不到就留空，
+    // 不拿 "iStoreOS" 之类的字符串当默认值骗眼睛。
+    var brand = p.Hostname || p.Title || '网络面板';
+    setText('brand', brand);
+    document.title = brand + ' · 网络状态';
+    setSysline(p);
+    setText('fnip', fn.Host || '未配置');
+    var pills = '';
+    // 模式是真识别的（PPPoE/DHCP/静态 IP/旁路由），连不连看默认路由：
+    // 旁路由没有拨号口，按 wan.Up 判断就会被报成"未连接"，那是假故障。
+    var wmode = wan.Mode || (wan.Proto || 'WAN');
+    var wip = wan.IP || '';
+    if (wmode === '旁路由') { wip = wan.Via || '已连接'; }
+    pills += '<span class="pill"><span class="dot ' + (wan.Connected ? 'ok' : 'bad') + '"></span>' +
+      esc(wmode) + ' <b>' + esc(wan.Connected ? (wip || '已连接') : '未连接') + '</b></span>';
+    pills += '<span class="pill p-cl"><span class="dot ' + (cl.Running ? 'ok' : (cl.Enabled ? 'bad' : 'idle')) + '"></span>OpenClash ' +
+      (cl.Running ? '<b>运行中</b>' : (cl.Enabled ? '<b class="st-bad">未运行</b>' : '未启用')) + '</span>';
+    pills += '<span class="pill p-fn"><span class="dot ' + (fn.VMRunning ? 'ok' : 'bad') + '"></span>fnOS ' +
+      (fn.VMRunning ? '<b>运行中</b>' : '<b class="st-bad">已停止</b>') + '</span>';
+    // iPad 面板机不再画卡片：它的状态由服务端告警（页脚）和接入设备那一行的标签承担
+    // iPad 自己的状态不进顶栏：横屏第四颗会掉到第二行，竖屏又得整颗藏掉，
+    // 等于同一件事在两种方向上各错一次。它本来就有 iPad 卡 + 设备行标签 + 页脚提示三处。
+    setHTML('pills', pills);
+
+    var cpu = num(p.CPUPct, 0);
+    setText('cpu', cpu < 10 ? cpu.toFixed(1) : Math.round(cpu));
+    var cores = p.CorePct || [], ch = '', k;
+    for (k = 0; k < cores.length; k++) {
+      var pc = cores[k] / 100;
+      ch += '<span><i class="' + lvl(pc) + '" style="height:' + Math.max(2, Math.min(100, cores[k])) + '%"></i></span>';
+    }
+    setHTML('cores', ch);
+    var ld = p.Load || [0, 0, 0];
+    setText('cpuf', '负载 ' + num(ld[0], 0).toFixed(2) + ' · ' + num(p.TempPkg, 0).toFixed(0) +
+      '°C · ' + num(p.Freq, 0).toFixed(2) + ' GHz');
+
+    var mp = num(p.MemPct, 0) / 100;
+    setText('mem', Math.round(num(p.MemPct, 0)));
+    var mb = el('membar');
+    mb.className = lvl(mp); mb.style.width = Math.round(mp * 100) + '%';
+    setText('memf', '已用 ' + bytes(p.MemUsed) + ' / ' + bytes(p.MemTotal) +
+      ' · 容器 ' + num(p.DockerRun, 0) + '/' + num(p.DockerAll, 0));
+
+    setText('wanrx', '↓ ' + rateShort(wan.RXr));
+    setText('wantx', '↑ ' + rateShort(wan.TXr));
+    hist.rx.push(num(wan.RXr, 0)); hist.tx.push(num(wan.TXr, 0));
+    if (hist.rx.length > MAXH) { hist.rx.shift(); }
+    if (hist.tx.length > MAXH) { hist.tx.shift(); }
+    drawSpark();
+    var ifs = p.Ifaces || [], upIf = 0;
+    for (k = 0; k < ifs.length; k++) { if (ifs[k].Up) { upIf++; } }
+    setText('wanf', '在线 ' + num(p.DevOnline, 0) + ' 台 · 网关 ' + (wan.GW || '—'));
+
+    setText('egip', eg.IP || '—');
+    // 暴露时长从"第一次探到国内"起算，所以它是个下界；国内期间探测加密到 30 秒一次
+    el('egcard').className = eg.CN ? 'card warn' : 'card';
+    var loc = ccName(eg.CC);
+    setText('egloc', [eg.City, loc, eg.ISP].join(' · ').replace(/( · ){2,}/g, ' · ') || '归属未知');
+    setText('egf', (eg.Err ? '<span class="st-warn">' + esc(eg.Err) + '</span>' :
+      (eg.Via || '') + ' · ' + Math.round(num(eg.Age, 0)) + ' 秒前探测'));
+    var egTxt = eg.Err ? '<span class="st-warn">' + esc(eg.Err) + '</span>' :
+      esc((eg.Via || '') + ' · ' + Math.round(num(eg.Age, 0)) + ' 秒前探测');
+    if (eg.CN) {
+      // 暴露时长优先，代理口字样让位：这张卡横屏只有 256px 宽，
+      // 三个字段全拼上就会被省略号截成"167 …"，等于把要人看的那句砍掉
+      egTxt = '<span class="st-warn">IP 已暴露 ' + durSec(num(eg.Exposure, 0)) +
+        '</span> · ' + Math.round(num(eg.Age, 0)) + ' 秒前';
+    }
+    el('egf').innerHTML = egTxt;
+
+    // OpenClash
+    lastClash = cl;
+    setText('clv', cl.Version || '');
+    pill('clpill', cl.Running ? '运行中' : (cl.Enabled ? '未运行' : '未启用'),
+      cl.Running ? 'ok' : (cl.Enabled ? 'bad' : 'idle'));
+    setText('node', cl.Node || (cl.Err ? cl.Err : '（未选择）'));
+    el('node').className = 'node' + (cl.Err && !cl.Node ? ' st-bad' : '');
+    setText('group', cl.Group || '—');
+    setText('eg2', eg.IP ? (eg.IP + ' · ' + (ccName(eg.CC) || eg.CC || '')) : (eg.Err || '探测中…'));
+    setText('mode', cl.Mode || '—');
+    setText('ptotal', num(cl.ProxyTotal, 0));
+    setText('conn', num(cl.ConnCount, 0));
+    setText('lat', cl.Latency > 0 ? Math.round(cl.Latency) + ' ms' : '—');
+    setText('dtot', bytes(cl.DownTotal));
+    setText('utot', bytes(cl.UpTotal));
+    drawGroups(cl);
+
+    // fnOS
+    pill('Fnpill', fn.VMRunning ? '虚拟机运行中' : '虚拟机已停止', fn.VMRunning ? 'ok' : 'bad');
+    setText('fncpu', pctv(fn.CpuPct));
+    el('fncpu').className = 'v' + (num(fn.CpuPct, 0) >= 95 ? ' st-bad' : (num(fn.CpuPct, 0) >= 80 ? ' st-warn' : ''));
+    // 内存原来是 "15% / 2.3GB"：分母（客户机总内存）就是那台机器的固定配置，
+    // 两个数说的是同一件事，留一个百分比就够了
+    setText('fnmem', pctv(fn.MemTotal > 0 ? (1 - fn.MemAvail / fn.MemTotal) * 100 : 0));
+    el('fnmem').className = 'v' + (num(fn.MemTotal, 0) > 0 && (1 - num(fn.MemAvail, 0) / num(fn.MemTotal, 1)) * 100 >= 90 ? ' st-warn' : '');
+    setText('fnup', dur(fn.Uptime));
+    setText('fnrd', bps(fn.DiskR));
+    setText('fnwr', bps(fn.DiskW));
+    setText('fngpul', fn.GPUOk && fn.GPUName ? fn.GPUName : 'P620 显卡');
+    var gpuTxt = fn.GPUErr || '未检出';
+    if (fn.GPUOk) {
+      gpuTxt = num(fn.GPUUtil, 0).toFixed(0) + '%';
+      if (num(fn.GPUMemTot, 0) > 0) { gpuTxt += ' · ' + (num(fn.GPUMem, 0) / 1024).toFixed(1) + '/' + Math.round(fn.GPUMemTot / 1024) + 'G'; }
+    }
+    setText('fngpu', gpuTxt);
+    el('fngpu').className = 'v' + (fn.GPUOk ? ' st-ok' : ' st-warn');
+    var vols = fn.Vols || [], vh = '';
+    for (k = 0; k < vols.length && k < 4; k++) {
+      var vp = num(vols[k].Pct, 0) / 100;
+      vh += '<div class="spec" style="border:0;padding:2px 0;display:block">' +
+        '<div style="display:-webkit-flex;display:flex;font-size:11px">' +
+        '<span class="sk">' + esc(vols[k].Name) + '</span>' +
+        '<span class="sv">' + bytes(vols[k].Used) + ' / ' + bytes(vols[k].Total) + '</span></div>' +
+        '<div class="bar" style="margin-top:4px"><i class="' + lvl(vp) + '" style="width:' +
+        Math.round(Math.min(100, Math.max(0, vp * 100))) + '%"></i></div></div>';
+    }
+    setHTML('vols', vh);
+    setText('mdf', fn.SSHErr ? fn.SSHErr : 'SSH 已连通');
+
+    // 线路质量：网关和运营 DNS 的往返没被透明代理带走（实测 DNS 3ms 对节点 700ms，两路不同），
+    // 所以这两个数能判断"慢在内网还是慢在外"；解析耗时走本机 dnsmasq→内核那条路，
+    // 那才是"网页打开慢不慢"里最直接的段。iPad 自己的状况不再常驻，只以页脚告警出现
+    var lk = p.Link || {};
+    var lkOk = !!lk.GW && !lk.Err;
+    setHTML('lkmeta', lk.Err ? esc(lk.Err) : esc(lk.GW || '未探测'));
+    var lkp = { cls: 'idle', txt: '未探测' };
+    if (lk.Err) { lkp = { cls: 'bad', txt: '探测失败' }; }
+    else if (lk.GW) {
+      if (num(lk.GwLoss, 0) >= 34) { lkp = { cls: 'bad', txt: '严重丢包' }; }
+      else if (num(lk.GwLoss, 0) > 0) { lkp = { cls: 'warn', txt: '有丢包' }; }
+      else if (num(lk.GwMs, 0) >= 50) { lkp = { cls: 'warn', txt: '偏慢' }; }
+      else { lkp = { cls: 'live', txt: '正常' }; }
+    }
+    pill('Lkpill', lkp.txt, lkp.cls);
+    setText('lkgw', lkOk ? num(lk.GwMs, 0).toFixed(1) + ' ms' : '—');
+    el('lkgw').className = 'v' + (lkOk && (num(lk.GwLoss, 0) > 0 || num(lk.GwMs, 0) >= 50) ? ' st-warn' : '');
+    setText('lkloss', lkOk ? Math.round(num(lk.GwLoss, 0)) + '%' : '—');
+    el('lkloss').className = 'v' + (lkOk && num(lk.GwLoss, 0) > 0 ? ' st-warn' : '');
+    setText('lkres', lk.ResolveErr ? lk.ResolveErr :
+      (num(lk.ResolveMs, 0) > 0 ? Math.round(num(lk.ResolveMs, 0)) + ' ms' : '—'));
+    el('lkres').className = 'v' + (lk.ResolveErr ? ' st-bad' : '');
+    // 一次都没记到就显示"—"：日志是环形缓冲，"0 次"会被读成"今天没掉过线"，那是假话
+    setText('lkdial', lk.NoLog || !lk.DialToday ? '—' : num(lk.DialToday, 0) + ' 次');
+    var lkf = [];
+    if (lk.Dns) { lkf.push('DNS ' + Math.round(num(lk.DnsMs, 0)) + 'ms'); }
+    if (num(lk.DropToday, 0) > 0) { lkf.push('今天断线 ' + num(lk.DropToday, 0) + ' 次'); }
+    else if (lk.LastDial && lk.LastDial !== '00:00') { lkf.push('上次拨号 ' + lk.LastDial); }
+    lkf.push(Math.round(num(lk.Age, 0)) + ' 秒前探测');
+    setText('lkf', lkf.join(' · '));
+
+    // 设备：能放几行由这张卡自己的高度决定（fitDevs），先按上次的行数画，
+    // 量出来容量更大就重画一次——写死 6 行就是"看得见却不让看"
+    drawDevs(p);
+    if (fitDevs()) { drawDevs(p); }
+
+    // 日志
+    var logs = p.Logs || [], lh = '';
+    // 融合栏是 tail 视图：要留的是最后几行，从前头数会把刚发生的面板操作挤掉
+    var from = logs.length > LOG_MAX ? logs.length - LOG_MAX : 0;
+    for (k = from; k < logs.length; k++) {
+      var s = logs[k], tm = '', msg = s;
+      if (s.length > 10 && s.charAt(2) === ':' && s.charAt(5) === ':' && s.charAt(8) === ' ') {
+        tm = s.substring(0, 8); msg = s.substring(10);
+      }
+      var src = '';
+      var mm = msg.match(/^\[([^\]]+)\]\s*/);
+      if (mm) {
+        src = '<span class="tag' + (mm[1] === '面板' ? ' me' : '') + '">' + esc(mm[1]) + '</span>';
+        msg = msg.substring(mm[0].length);
+      }
+      var cls = 'log';
+      if (/error|fail|segfault|Fail/.test(msg)) { cls += ' bad'; }
+      else if (/warn|denied|refused|no route/.test(msg)) { cls += ' warn'; }
+      lh += '<div class="' + cls + '">' + (tm ? '<span class="tm">' + esc(tm) + '</span>' : '') + src + esc(msg) + '</div>';
+    }
+    setHTML('logs', lh);
+    setText('logn', '最近 ' + logs.length + ' 条');
+
+    setText('fver', 'routerpanel ' + (p.Version || ''));
+    var fupd = el('fupd');
+    fupd.innerHTML = '数据 ' + (p.Time ? esc(String(p.Time).substring(11, 19)) : '') +
+      ' · 本机 ' + esc(fmtSec(new Date()));
+    setText('fres', '每 3 秒刷新 · ' + (es ? 'SSE' : '轮询'));
+    // 每帧先纠一次分组行数上限：卡片高度取决于旁边那张卡，写死的数字迟早会错。
+    // 只重画分组这一块，不去动设备那侧——两边同时按余量加减会互相抢高度抖起来。
+    if (fitGroups(cl)) { drawGroups(cl); }
+    el('stale').style.display = 'none';
+    paintOps(p);
+    checkFit();
+  }
+
+  // drawGroups：分组那一列。勾过就整份照勾的顺序显示，一个都不藏——
+  // 以前把排第一的那个挪去当"当前节点"、列表里就不见了，勾四个只看得到三个，
+  // 像少了一个。那一行"分组 xxx"跟着让位：列表第一行就是它，信息没丢，
+  // 还省出一行的高度给真正多出来的分组。没勾过才退回老样子。
+  var gShown = 0;
+
+  function drawGroups(cl) {
+    var picked = cl.Show && cl.Show.length ? cl.Show : null;
+    var gl = el('groupline');
+    if (gl) { gl.style.display = picked ? 'none' : ''; }
+    setText('groupt', picked ? '勾选分组' : '其他分组');
+    var gs = picked || cl.Groups || [], gh = '', shown = 0, skip = 0, k;
+    for (k = 0; k < gs.length; k++) {
+      if (!picked && gs[k].Name === cl.Group) { continue; }
+      if (shown >= GROUPS_MAX) { skip = gs.length - k; break; }
+      gh += '<div class="spec"><span class="sk">' + esc(gs[k].Name) + '</span><span class="sv">' +
+        esc(gs[k].Now || '—') + '</span></div>';
+      shown++;
+    }
+    gShown = shown;
+    if (skip > 0) {
+      gh += '<div class="spec"><span class="sk st-mute">还有 ' + skip + ' 个没排下</span>' +
+        '<span class="sv st-mute">少勾两个</span></div>';
+    }
+    setHTML('groups', gh);
+  }
+
+  // fitGroups：能放几行是量出来的，不是写死的。
+  // 上限从 3 提到 5 之后他勾了五个，整页实测超屏 12px——一个固定数字在这种
+  // 情况下必然是错的：卡片高度取决于旁边那张卡，行高取决于字体和 emoji。
+  // 所以看 OpenClash 这张卡自己还剩多少高度：够一行就加一行，挤出去就减一行。
+  // 加减各留 6px 余量，不然临界值上一帧加一帧减会抖。
+  function fitGroups(cl) {
+    var box = el('groups');
+    if (!box || !box.offsetHeight) { return false; } // 窄屏那档整块被 CSS 收掉了，量了也没用
+    var row = box.firstElementChild;
+    if (!row) { return false; }
+    var rh = row.offsetHeight;
+    var card = box.parentNode;
+    if (!rh || !card) { return false; }
+    // 卡片剩多少高度 = 容器高 − 内容高 + 分组这块已经占掉的那截
+    var free = card.clientHeight - card.scrollHeight + box.offsetHeight;
+    var cap = GROUPS_MAX;
+    if (free >= rh + 6) { cap = gShown + Math.floor((free - 6) / rh); }
+    else if (free < -6) { cap = gShown - 1; }
+    if (cap < 1) { cap = 1; }
+    if (cap > 8) { cap = 8; }
+    if (cap !== GROUPS_MAX) { GROUPS_MAX = cap; return true; }
+    return false;
+  }
+
+  // drawDevs：一行两栏（名字+速率 / 地址+会话数），速率那侧对面板机让位给画面状态
+  function drawDevs(p) {
+    var devs = p.Devs || [], dh = '';
+    for (var k = 0; k < devs.length && k < DEV_MAX; k++) {
+      var d = devs[k];
+      var r = Math.max(num(d.RXr, 0), num(d.TXr, 0));
+      var rt = !d.On ? '离线' : (r < 1000 ? '空闲' :
+        (d.RXr >= 1000 ? '↓' + rateShort(d.RXr) + ' ' : '') + (d.TXr >= 1000 ? '↑' + rateShort(d.TXr) : ''));
+      var rtCls = '';
+      if (d.Panel) {
+        rt = d.Panel;
+        rtCls = d.Panel === '失联' ? ' st-bad' : (d.Panel === '显示中' ? '' : ' st-warn');
+      }
+      var nm = d.Name || '未命名设备';
+      dh += '<div class="dev' + (d.On ? '' : ' off') + '"><div class="l1"><span class="nm">' + esc(nm) +
+        '</span><span class="rt' + rtCls + '">' + esc(rt) + '</span></div><div class="l2"><span class="ip">' +
+        esc(d.IP || '') + (d.MAC ? ' · ' + esc(d.MAC) : '') + '</span><span>' +
+        num(d.Conns, 0) + ' 会话</span></div></div>';
+    }
+    setHTML('devs', dh);
+    setText('devmeta', '在线 ' + num(p.DevOnline, 0) + ' / 记录 ' + devs.length);
+  }
+
+  // slackPx：整页还剩多少高度。不能用 app.scrollHeight 减——#app 至少有一屏高，
+  // 竖屏内容没填满时它报的就是视口本身，余量永远算成 0，行数就再也涨不上去。
+  // 所以老老实实把头、三排、脚各自的高度加起来，再补上 #app 的上下 padding。
+  function slackPx() {
+    var app = el('app'), sel = ['header', '.row1', '.row2', '.row3', 'footer'];
+    var t = 0, n, i;
+    for (i = 0; i < sel.length; i++) {
+      n = document.querySelector(sel[i]);
+      if (n) { t += n.offsetHeight; }
+    }
+    if (app && window.getComputedStyle) {
+      var cs = window.getComputedStyle(app, null);
+      t += (parseInt(cs.paddingTop, 10) || 0) + (parseInt(cs.paddingBottom, 10) || 0);
+    }
+    return (window.innerHeight || 0) - t;
+  }
+
+  // fitDevs：两个方向要分开量，因为卡片高度的来源不一样。
+  // 横屏第 2 排是 flex:1 拉出来的，卡片比内容高，能塞几行看容器自己的 clientHeight；
+  // 竖屏那排是 flex:none，卡片跟着内容长，clientHeight 永远等于已经画出来的行数，
+  // 光看它就只能停在原样——所以竖屏改看整页还剩多少余量。
+  // 加行要留 6px 余量、减行只在真挤出去时才减，不然会在临界值上一帧加一帧减地抖。
+  function fitDevs() {
+    var box = el('devs');
+    if (!box) { return false; }
+    var row = box.firstElementChild;
+    if (!row) { return false; }
+    var rh = row.offsetHeight;
+    if (!rh) { return false; }
+    var cap = Math.floor(box.clientHeight / rh);
+    if (cap < 1) { cap = 1; }
+    var slack = slackPx();
+    if (slack > rh + 6) { cap = DEV_MAX + Math.floor((slack - 6) / rh); }
+    else if (slack < -6 && DEV_MAX > 1) { cap = DEV_MAX - 1; }
+    if (cap > 14) { cap = 14; }
+    if (cap !== DEV_MAX) { DEV_MAX = cap; return true; }
+    return false;
+  }
+
+  // refit：转屏或窗口尺寸一变，能放几行就跟着变。等下一帧数据再重算，
+  // 新尺寸下会先空着一截，看起来像"少了设备"
+  function refit() {
+    if (!lastP) { return; }
+    var cl = lastP.Clash || {};
+    if (fitGroups(cl)) { drawGroups(cl); }
+    if (fitDevs()) { drawDevs(lastP); }
+  }
+
+  // checkFit：长亮屏幕不能靠滚动，超了就自己说一声，比谁去量都可靠
+  // ?m=1 再把每一排的高度写进同一行：只报"超屏 21px"没法知道该从哪一排抠，
+  // 而这个屏幕不在手边，量一次要等一次部署，数字得自己带回来
+  function checkFit() {
+    var e = el('fit');
+    if (!e) { return; }
+    var over = (document.body.scrollHeight || 0) - (window.innerHeight || 0);
+    var note = (over > 2 ? '版式超屏 ' + over + 'px · ' : '版式已铺满 · ') + meterNote();
+    if (/[?&]m=1/.test(window.location.search || '')) {
+      var app = el('app'), r2 = document.querySelector('.row2'), min = 0;
+      if (app && r2) {
+        r2.style.webkitFlex = 'none'; r2.style.flex = 'none';
+        min = app.scrollHeight;
+        r2.style.webkitFlex = ''; r2.style.flex = '';
+      }
+      // 卡片被 flex 拉平后看不出谁最高，先让每一排按内容起头排一次再量
+      var g = document.querySelectorAll('.grid'), i;
+      for (i = 0; i < g.length; i++) { g[i].style.webkitAlignItems = 'flex-start'; g[i].style.alignItems = 'flex-start'; }
+      var per = cards('.row1') + '-' + cards('.row2') + '-' + cards('.row3');
+      for (i = 0; i < g.length; i++) { g[i].style.webkitAlignItems = ''; g[i].style.alignItems = ''; }
+      note += ' 内容' + min + ' 排' + h('.row1') + '/' + h('.row2') + '/' + h('.row3') +
+        ' 头' + h('header') + ' 脚' + h('footer') + ' 实高' + per;
+    }
+    e.className = over > 2 ? 'st-warn' : '';
+    e.innerHTML = note;
+  }
+  function h(sel) {
+    var n = document.querySelector(sel);
+    return n ? n.offsetHeight : -1;
+  }
+  // 同一排里每张卡的内容高度：排的高度取最大值，所以要抠就抠最高的那张
+  function cards(sel) {
+    var out = [], n = document.querySelectorAll(sel + ' .card');
+    for (var i = 0; i < n.length; i++) { out.push(n[i].scrollHeight); }
+    return out.join('_');
+  }
+  window.onresize = function () { setMeters(); refit(); checkFit(); };
+
+  // 活体心跳：SSE 只证明连接在，不证明 JS 还在跑。熄屏被挂起时定时器一起停，
+  // 这一路就断了——面板据此说"页面停止刷新"，而不是继续假装"正在显示"。
+  function ping() {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', '/api/ping', true);
+      x.send(null);
+    } catch (e) {}
+  }
+  setInterval(ping, 20000);
+  ping();
+
+  // 列表截几行交给 JS：CSS 的 max-height 是按像素切的，切到半行就是"底部文字被裁掉"，
+  // 而一行的高度是字体、padding、边框凑出来的，我不打算去猜那个数
+  var GROUPS_MAX = 3, DEV_MAX = 6, LOG_MAX = 3;
+  function setMeters() {
+    var narrow = (window.innerWidth || 1024) <= 820;
+    var low = (window.innerHeight || 768) <= 700; // 横屏还带着 Safari 上下两条栏
+    // 分组从 3 行放到 5 行：他说横屏明显还塞得下。数字不是拍脑袋——
+    // 部署完用 ?m=1 在 1024x748（全屏网页的真实高度）实测过第 2 排没溢出才留下的，
+    // 溢出就回退到 4，不能靠猜。
+    GROUPS_MAX = narrow || low ? 1 : 5;
+    DEV_MAX = narrow ? 4 : (low ? 5 : 6);
+    // 日志栏的高度由旁边 iPad 卡兜着（那张更矮），多两行不会把页脚挤下去，
+    // 但屏太矮时还是得让位——他要点的是"看得见刚才那个动作"，不是看满屏流水
+    LOG_MAX = low ? 3 : 4;
+  }
+  setMeters();
+
+  function meterNote() {
+    return (window.innerWidth || 0) + 'x' + (window.innerHeight || 0) +
+      ' 分组' + GROUPS_MAX + ' 设备' + DEV_MAX + ' 日志' + LOG_MAX;
+  }
+
+  // durSec：处置类计时从秒开始读才有意义，"已暴露 0 分"等于没说
+  function durSec(sec) {
+    var n = Math.round(num(sec, 0));
+    if (n < 60) { return n + ' 秒'; }
+    if (n < 3600) { return Math.floor(n / 60) + ' 分 ' + (n % 60) + ' 秒'; }
+    return Math.floor(n / 3600) + ' 小时 ' + Math.floor((n % 3600) / 60) + ' 分';
+  }
+
+  function fmtSec(d) {
+    var h = d.getHours(), m = d.getMinutes(), s = d.getSeconds();
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  // ---- 数据通道 ----
+  var LS_LAST = 'rp_last';
+  function saveLast(txt) {
+    try { window.localStorage.setItem(LS_LAST, txt); } catch (e) {}
+  }
+  function loadLast() {
+    var t = null;
+    try { t = window.localStorage.getItem(LS_LAST); } catch (e) {}
+    return t;
+  }
+  function onData(txt) {
+    var p;
+    try { p = JSON.parse(txt); } catch (e) { return; }
+    if (!p || !p.Wan) { return; }
+    lastMsg = new Date().getTime();
+    esFail = 0;
+    render(p);
+    saveLast(txt);
+    var o = el('offline');
+    if (o) { o.style.display = 'none'; }
+  }
+  // 夜间降亮：23:00-07:00 盖一层黑。手动开关存在 localStorage，点了时钟就切换
+  function nightOn() {
+    var ov = null;
+    try { ov = window.localStorage.getItem('rp_night'); } catch (e) {}
+    if (ov === '1') { return true; }
+    if (ov === '0') { return false; }
+    var h = new Date().getHours();
+    return h >= 23 || h < 7;
+  }
+  function applyNight() {
+    var n = el('night');
+    if (!n) { return; }
+    n.className = nightOn() ? 'on' : '';
+  }
+  setInterval(applyNight, 60000);
+  applyNight();
+  (function () {
+    var c = el('clk');
+    if (c) {
+      c.onclick = function () {
+        var now = el('night').className === 'on' ? false : true;
+        try { window.localStorage.setItem('rp_night', now ? '1' : '0'); } catch (e) {}
+        applyNight();
+      };
+    }
+  })();
+  function startStream() {
+    if (typeof window.EventSource === 'undefined') { startPoll(); return; }
+    try { es = new EventSource('/api/stream'); } catch (e) { es = null; }
+    if (!es) { startPoll(); return; }
+    es.onmessage = function (ev) { onData(ev.data); };
+    es.onerror = function () {
+      esFail++;
+      // 老 WebKit 断流后可能一直重试同一个坏连接，两次就换成轮询
+      if (esFail > 2) { try { es.close(); } catch (e) {} es = null; startPoll(); }
+    };
+  }
+  function startPoll() {
+    if (pollTimer) { return; }
+    pollTimer = setInterval(function () {
+      var x = new XMLHttpRequest();
+      x.open('GET', '/api/state?_=' + new Date().getTime(), true);
+      x.onreadystatechange = function () {
+        if (x.readyState === 4 && x.status === 200) { onData(x.responseText); }
+      };
+      try { x.send(null); } catch (e) {}
+    }, 3000);
+  }
+  function reconnect() {
+    if (es) { try { es.close(); } catch (e) {} es = null; }
+    esFail = 0;
+    startStream();
+  }
+
+  // 锁屏再解锁、或者切回主屏幕图标，长连接基本是死的：重连 + 看门狗重载
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { reconnect(); tickClock(); }
+  }, false);
+  window.addEventListener('pageshow', function () { reconnect(); }, false);
+  window.addEventListener('resize', drawSpark, false);
+
+  setInterval(tickClock, 1000);
+  tickClock();
+  setInterval(function () {
+    var age = new Date().getTime() - lastMsg;
+    if (lastMsg === 0) { return; }
+    el('stale').style.display = age > 10000 ? 'block' : 'none';
+    if (age > STALE_MS) { location.reload(); }   // 没有 Service Worker，只能整页重来
+  }, 5000);
+
+  // ---- 控制：切节点 / 切模式（要令牌，只走局域网） ----
+  var meta = { control: false, groups: [], mode: '', show: [] };
+  var LS_TOK = 'rp_token';
+  function getToken() {
+    var t = null;
+    try { t = window.localStorage.getItem(LS_TOK); } catch (e) { t = null; }
+    return t || '';
+  }
+  // 令牌输入用页面自己的框，不用 window.prompt：iOS 9 的全屏网页里系统输入框
+  // 有可能根本不出现，点了"保存"却没法输令牌，看起来就是没反应。
+  var tokCB = null;
+  function askToken(cb) {
+    var t = getToken();
+    if (t) { cb(t); return; }
+    tokCB = cb;
+    var i = el('tokin');
+    if (i) { i.value = ''; }
+    setCls('mask', 'open');
+    setCls('tok', 'open');
+    if (i) { setTimeout(function () { try { i.focus(); } catch (e) {} }, 150); }
+  }
+  function closeTok(ok) {
+    setCls('mask', '');
+    setCls('tok', '');
+    var cb = tokCB; tokCB = null;
+    if (!ok) { return; }
+    var i = el('tokin');
+    var v = (i && i.value ? i.value : '').replace(/^\s+|\s+$/g, '');
+    if (!v) { return; }
+    try { window.localStorage.setItem(LS_TOK, v); } catch (e) {}
+    if (cb) { cb(v); }
+  }
+  (function () {
+    var y = el('tokyes'), n = el('tokno'), i = el('tokin');
+    if (y) { y.onclick = function () { closeTok(true); }; }
+    if (n) { n.onclick = function () { closeTok(false); }; }
+    if (i) { i.onkeydown = function (ev) { if (ev && ev.keyCode === 13) { closeTok(true); } }; }
+  })();
+  function xhr(method, url, body, cb) {
+    var x = new XMLHttpRequest();
+    x.open(method, url, true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    var t = getToken();
+    if (t) { x.setRequestHeader('X-Token', t); }
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) { return; }
+      var j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) { j = null; }
+      cb(x.status, j, x.responseText);
+    };
+    try { x.send(body ? JSON.stringify(body) : null); } catch (e) { cb(0, null, String(e)); }
+  }
+  function loadMeta() {
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/meta?_=' + new Date().getTime(), true);
+    x.onreadystatechange = function () {
+      if (x.readyState === 4 && x.status === 200) {
+        try { meta = JSON.parse(x.responseText) || meta; } catch (e) {}
+        if (!meta.groups) { meta.groups = []; }
+        if (!meta.show) { meta.show = []; }
+        if (pickSel) { paintPick(); } // 选择框开着的时候列表会自己变新，不用关了重开
+        paintOps(null);
+      }
+    };
+    try { x.send(null); } catch (e) {}
+  }
+  // ---- 面板操作 ----
+  // 只有两类：代理模式（规则/全局/直连）和 OpenClash 插件本身的开关。
+  // 锁按钮的依据是服务端的 cl.Op，不是本地标志：页面被 iPad 挂起重启后，
+  // 操作还在跑，本地状态会丢，服务端不会。
+  var MODES = ['rule', 'global', 'direct'];
+  var MODE_CN = { rule: '规则', global: '全局', direct: '直连' };
+  var localBusy = '';
+
+  function opPost(payload, label) {
+    if (!getToken()) { askToken(function () { opPost(payload, label); }); return; }
+    localBusy = label;
+    paintOps(null);
+    xhr('POST', '/api/control', payload, function (st, j, raw) {
+      localBusy = '';
+      if (st === 403) {
+        try { window.localStorage.removeItem(LS_TOK); } catch (e) {}
+        setOpNote('<span class="st-warn">令牌不对，重新输入</span>');
+        askToken(function () { opPost(payload, label); });
+        return;
+      }
+      if (!j || j.error) {
+        // 409 = 上一个操作还在跑：把服务端那句原样显示出来，别让人以为没响应
+        setOpNote('<span class="st-warn">' + esc((j && j.error) || raw || '请求失败') + '</span>');
+        paintOps(null);
+        return;
+      }
+      setOpNote('<span class="st-mute">已提交，进度看下方日志</span>');
+      paintOps(null);
+    });
+  }
+
+  function setOpNote(h) {
+    var e = el('opnote');
+    if (!e) { return; }
+    e.innerHTML = h || '';
+    if (h) { setTimeout(function () { if (e.innerHTML === h) { e.innerHTML = ''; } }, 12000); }
+  }
+
+  // paintOps：busy 为空表示用服务端那一帧的状态
+  function paintOps(p) {
+    var ops = el('ops');
+    if (!ops) { return; }
+    ops.style.display = meta.control ? '' : 'none';
+    // 「设置」那个小入口和这些按钮同命运：写接口没开就藏起来，
+    // 免得点了个打不开的选择框
+    var gg = el('op_groups');
+    if (gg) { gg.style.display = meta.control ? '' : 'none'; }
+    if (!meta.control) { return; }
+    var cl = (p && p.Clash) || lastClash || {};
+    var busy = cl.Op || localBusy;
+    var t = el('opClash');
+    if (t) {
+      t.innerHTML = cl.Running ? '停止 OpenClash' : '启动 OpenClash';
+      t.className = 'op' + (cl.Running ? '' : ' off') + (busy ? ' busy' : '');
+    }
+    for (var i = 0; i < MODES.length; i++) {
+      var b = el('op_' + MODES[i]);
+      if (!b) { continue; }
+      b.className = 'op' + (cl.Mode === MODES[i] ? ' on' : '') + (busy ? ' busy' : '');
+    }
+    if (busy) { setOpNote('<span class="st-warn">操作中：' + esc(busy) + '</span>'); }
+  }
+
+  // askOK：页面自己的确认框。不用 window.confirm——iOS 9 在全屏网页里弹系统框
+  // 会把页面挂起，取消之后 SSE 还要重连一遍，画面先白一秒，比不确认更吓人
+  var askCB = null;
+  function setCls(id, c) { var e = el(id); if (e) { e.className = c; } }
+  function openAsk(title, desc, yes, cb) {
+    setText('askt', title); setText('askd', desc); setText('askyes', yes);
+    askCB = cb;
+    setCls('mask', 'open');
+    setCls('ask', 'open');
+  }
+  function closeAsk(yes) {
+    setCls('mask', '');
+    setCls('ask', '');
+    var cb = askCB; askCB = null;
+    if (yes && cb) { cb(); }
+  }
+  (function () {
+    var y = el('askyes'), n = el('askno'), m = el('mask');
+    if (y) { y.onclick = function () { closeAsk(true); }; }
+    if (n) { n.onclick = function () { closeAsk(false); }; }
+    // 点遮罩等于取消：误触的人本来就不想停，不该再问他一次
+    if (m) {
+      m.onclick = function () {
+        if (askCB) { closeAsk(false); } else if (tokCB) { closeTok(false); } else if (pickSel) { closePick(); }
+      };
+    }
+  })();
+
+  function wireOps() {
+    var t = el('opClash');
+    if (t) {
+      t.onclick = function () {
+        var busy = (lastClash && lastClash.Op) || localBusy;
+        if (busy) { setOpNote('<span class="st-warn">请先等上一个操作结束：' + esc(busy) + '</span>'); return; }
+        if (lastClash && lastClash.Running) {
+          openAsk('停止 OpenClash？',
+            '插件一停，所有走代理的连接立刻断掉；再点一次启动，大约 15 秒才恢复。',
+            '确定停止', function () { opPost({ action: 'clash', state: 'off' }, 'OpenClash 停止'); });
+          return;
+        }
+        opPost({ action: 'clash', state: 'on' }, 'OpenClash 启动');
+      };
+    }
+    for (var i = 0; i < MODES.length; i++) {
+      (function (m) {
+        var b = el('op_' + m);
+        if (!b) { return; }
+        b.onclick = function () {
+          var busy = (lastClash && lastClash.Op) || localBusy;
+          if (busy) { setOpNote('<span class="st-warn">请先等上一个操作结束：' + esc(busy) + '</span>'); return; }
+          opPost({ action: 'mode', mode: m }, '模式 \u2192 ' + MODE_CN[m]);
+        };
+      })(MODES[i]);
+    }
+  }
+  wireOps();
+
+  // ---- 「卡片上显示哪几个分组」----
+  // 一个名字都不预置：列表完全来自 /api/meta（内核 /proxies 里的策略组），
+  // 各家订阅叫什么就是什么。勾的是"顺序"不是"集合"——卡片里排第一的那个
+  // 兼作标题下"当前节点"，谁排第一得由人说得上，不该由代码按字样猜。
+  var pickSel = null;
+
+  function nowOf(n) {
+    var gs = (lastClash && lastClash.Groups) || [], i;
+    for (i = 0; i < gs.length; i++) { if (gs[i].Name === n) { return gs[i].Now || ''; } }
+    return '';
+  }
+
+  function idxOf(list, n) {
+    for (var i = 0; i < list.length; i++) { if (list[i] === n) { return i; } }
+    return -1;
+  }
+
+  function paintPick() {
+    var all = meta.groups || [], h = '', i, on;
+    if (!all.length) {
+      setHTML('picklist', '<div class="pd">读不到分组：OpenClash 得在跑着的状态下才有列表。</div>');
+      return;
+    }
+    for (i = 0; i < all.length; i++) {
+      on = idxOf(pickSel || [], all[i]);
+      h += '<div class="g' + (on >= 0 ? ' on' : '') + '" data-i="' + i + '">' +
+        '<span class="no">' + (on >= 0 ? (on + 1) : '') + '</span>' +
+        '<span class="n">' + esc(all[i]) + '</span>' +
+        '<span class="nw">' + esc(nowOf(all[i])) + '</span></div>';
+    }
+    setHTML('picklist', h);
+    var box = el('picklist');
+    if (!box) { return; }
+    for (i = 0; i < box.childNodes.length; i++) {
+      (function (node) {
+        node.onclick = function () {
+          var n = meta.groups[parseInt(node.getAttribute('data-i'), 10)], k;
+          if (!n) { return; }
+          k = idxOf(pickSel, n);
+          if (k >= 0) { pickSel.splice(k, 1); } else { pickSel.push(n); }
+          paintPick();
+        };
+      })(box.childNodes[i]);
+    }
+  }
+
+  function openPick() {
+    pickSel = (meta.show || []).slice();
+    setCls('mask', 'open');
+    setCls('pick', 'open');
+    paintPick();
+  }
+
+  function closePick() {
+    setCls('mask', '');
+    setCls('pick', '');
+    pickSel = null;
+  }
+
+  (function () {
+    var g = el('op_groups');
+    if (g) {
+      g.onclick = function () {
+        if (!meta.control) { return; }
+        openPick();
+        if (!(meta.groups || []).length) { loadMeta(); } // 列表还没回来就等它自己刷新
+      };
+    }
+    var c = el('pickclear');
+    if (c) { c.onclick = function () { pickSel = []; paintPick(); }; }
+    var n = el('pickno');
+    if (n) { n.onclick = closePick; }
+    var s = el('picksave');
+    if (s) {
+      s.onclick = function () {
+        var sel = pickSel || [];
+        closePick();
+        // 空列表是合法选择：意思是"别按我勾的排，退回按名字排序显示"
+        opPost({ action: 'groups', groups: sel }, '保存显示分组');
+      };
+    }
+  })();
+
+  loadMeta();
+  setInterval(loadMeta, 60000);
+  (function () {
+    // 先用上一次的数据铺满画面，再等流；路由器重启时屏幕上不会是一片空壳
+    var t = loadLast();
+    if (t) {
+      try {
+        var p = JSON.parse(t);
+        if (p && p.Wan) {
+          render(p);
+          var o = el('offline');
+          if (o) { o.style.display = 'block'; }
+        }
+      } catch (e) {}
+    }
+  })();
+  startStream();
+})();
+</script>
+</body>
+</html>
