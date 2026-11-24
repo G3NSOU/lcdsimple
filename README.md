@@ -13,9 +13,11 @@
 
 所有截图都是真机真数据，用 `-mask` 模式出的图：IP、MAC、主机名、设备名一律打码（见下面「截图模式」）。
 
-| 屏幕端 1920×1080 | iPad 端 1024×748（横屏全屏网页） | iPad 端 768×1004（竖屏） |
-| --- | --- | --- |
-| ![屏幕端](docs/screenshots/screen-1920x1080.png) | ![iPad 横屏](docs/screenshots/ipad-1024x748.png) | ![iPad 竖屏](docs/screenshots/ipad-768x1004.png) |
+| 屏幕端 1920×1080 | iPad 端 1024×748（横屏全屏网页） |
+| :--- | :--- |
+| <img src="docs/screenshots/screen-1920x1080.png" width="760"> | <img src="docs/screenshots/ipad-1024x748.png" width="520"> |
+
+<p align="center"><img src="docs/screenshots/ipad-768x1004.png" width="380" alt="iPad 端 768×1004（竖屏）"></p>
 
 ## 跑在什么机器上，吃多少资源
 
