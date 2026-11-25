@@ -218,8 +218,11 @@ func main() {
 
 	cv := NewCanvas(W, H)
 	refreshSeconds = *interval
-	if !*noFB {
-		// 纯 HTTP 模式根本不画屏，字体缺了也不该把 iPad 的页面一起拖死
+	// 只要这一趟会真的动笔就得起字体：写帧缓冲要，-png 出一张图也要。
+	// 以前只看 -no-fb，于是 `-no-fb -png`（出图不占屏的标准跑法）字体是 nil，
+	// 顶栏一调 measure 就 SIGSEGV，图都出不来。
+	// 纯 HTTP 模式根本不画屏，字体缺了也不该把 iPad 的页面一起拖死。
+	if !*noFB || *pngOut != "" {
 		if err := cv.loadFonts(*fontL, *fontN, *fontB); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			os.Exit(1)
